@@ -1,0 +1,9 @@
+{
+    "_id": "uuid_из_postgresql",
+    "lecture_id": "uuid_лекции",
+    "title": "Паттерны проектирования",
+    "annotation": "Краткий обзор паттернов Singleton, Factory, Builder...",
+    "content_text": "Полный текст лекции с подробными примерами...",
+    "course_name": "Архитектура ПО",
+    "is_specialty_discipline": true
+}
