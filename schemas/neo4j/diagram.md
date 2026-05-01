@@ -1,4 +1,4 @@
-<img width="442" height="408" alt="image" src="https://github.com/user-attachments/assets/bd145507-dd5c-46a2-bb57-182cee9b743b" />
+<img width="338" height="310" alt="image" src="https://github.com/user-attachments/assets/f5224240-7469-4de6-9c85-d4c1e0bd1611" />
 
 # Описание схемы
 
