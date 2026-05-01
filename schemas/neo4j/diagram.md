@@ -1,0 +1,70 @@
+<img width="442" height="408" alt="image" src="https://github.com/user-attachments/assets/bd145507-dd5c-46a2-bb57-182cee9b743b" />
+
+# Описание схемы
+
+```json
+{
+    "_comment_rel": "Связи (Relationship)",
+    "items_rel": [
+        {
+            "_relationship": "ENROLLED_IN",
+            "_description": "Является ли студент зачисленным в группу",
+            "_properties": {
+                "enrollment_year": "Дата зачисления"
+            }
+        },
+        {
+            "_relationship": "HAS_LECTURE",
+            "_description": "Есть ли занятие по расписанию",
+            "_properties": {
+                "scheduled_date": "Дата проведения занятия",
+                "classroom": "Номер кабинета",
+                "teacher": "Имя преподавателя"
+            }
+        },
+        {
+            "_relationship": "ATTENDED",
+            "_description": "Отмечен ли студент на занятии",
+            "_properties": {
+                "present": "bool",
+                "marked_at": "Отмечен когда",
+                "marked_by": "Отмечен кем"
+            }
+        }
+    ],
+    "_comment_node": "Узлы (Nodes)",
+    "items_node": [
+        {
+            "_node": "Student",
+            "_description": "Описание студента",
+            "_properties": {
+                "id": "Id студента",
+                "name": "ФИО студента",
+                "student_card_number": "Номер студенческого билета",
+                "email": "Email"
+            }
+        },
+        {
+            "_node": "Group",
+            "_description": "Описание группы",
+            "_properties": {
+                "id": "Id группы",
+                "name": "Название группы",
+                "enrollment_year": "Год зачисления"
+            }
+        },
+        {
+            "_node": "Lecture",
+            "_description": "Описание лекции",
+            "_properties": {
+                "id": "Id лекции",
+                "title": "Название лекции",
+                "course_name": "Название курса",
+                "date": "Дата проведения",
+                "duration_minutes": "продолжительность в минутах",
+                "is_speciality": "Является ли спец. дисциплиной"
+            }
+        }
+    ]
+}
+```
