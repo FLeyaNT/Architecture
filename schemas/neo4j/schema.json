@@ -12,7 +12,6 @@
             "_relationship": "HAS_LECTURE",
             "_description": "Есть ли занятие по расписанию",
             "_properties": {
-                "scheduled_date": "Дата проведения занятия",
                 "classroom": "Номер кабинета",
                 "teacher": "Имя преподавателя"
             }
@@ -56,6 +55,7 @@
                 "title": "Название лекции",
                 "course_name": "Название курса",
                 "date": "Дата проведения",
+                "week_number": 1,
                 "duration_minutes": "продолжительность в минутах",
                 "is_speciality": "Является ли спец. дисциплиной"
             }

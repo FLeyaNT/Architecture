@@ -1,0 +1,11 @@
+{
+    "key": "student:s1:data",
+    "type": "hash",
+    "ttl": 3600,
+    "value": {
+        "id": "s1",
+        "name": "Иванов Иван",
+        "student_card_number": "2025001",
+        "group": "ИКБО-01-23"
+    }
+}
