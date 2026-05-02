@@ -1,4 +1,5 @@
-<img width="1527" height="687" alt="image" src="https://github.com/user-attachments/assets/841552ee-2047-43b5-b4f3-dee667b4f062" />
+<img width="1425" height="682" alt="image" src="https://github.com/user-attachments/assets/d39e8fd5-6e32-4fbe-8ed2-015c12400c4f" />
+
 
 
 # Обоснование выбора хранилищ:
