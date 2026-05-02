@@ -20,7 +20,6 @@
             "_relationship": "HAS_LECTURE",
             "_description": "Есть ли занятие по расписанию",
             "_properties": {
-                "scheduled_date": "Дата проведения занятия",
                 "classroom": "Номер кабинета",
                 "teacher": "Имя преподавателя"
             }
