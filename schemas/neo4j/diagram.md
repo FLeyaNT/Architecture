@@ -2,6 +2,9 @@
 
 # Описание схемы
 
+<img width="1148" height="900" alt="image" src="https://github.com/user-attachments/assets/ed4c9587-8a07-4062-b0e5-2a6915757d75" />
+
+
 ```json
 {
     "_comment_rel": "Связи (Relationship)",
