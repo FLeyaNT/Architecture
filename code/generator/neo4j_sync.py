@@ -1,15 +1,12 @@
 import psycopg2
 from neo4j import GraphDatabase
-from datetime import datetime
 from uuid import UUID
 from decimal import Decimal
-
+from datetime import date, time
 
 # ============================================================
 # Подключение к PostgreSQL
 # ============================================================
-
-
 pg_conn = psycopg2.connect(
     host='localhost',
     port=5433,
@@ -19,19 +16,14 @@ pg_conn = psycopg2.connect(
 )
 pg_cur = pg_conn.cursor()
 
-
 # ============================================================
 # Подключение к Neo4j
 # ============================================================
-
-
 class Neo4jConnection:
     def __init__(self, uri, user, password):
         self.driver = GraphDatabase.driver(uri, auth=(user, password))
-    
     def close(self):
         self.driver.close()
-    
     def execute_query(self, query, parameters=None):
         with self.driver.session() as session:
             result = session.run(query, parameters or {})
@@ -43,431 +35,355 @@ neo4j_conn = Neo4jConnection(
     password="password"
 )
 
-
 # ============================================================
-# Функции-помощники
+# Вспомогательные функции
 # ============================================================
-
-
 def uuid_to_str(uuid_value):
-    if isinstance(uuid_value, UUID):
-        return str(uuid_value)
-    return uuid_value
+    return str(uuid_value) if isinstance(uuid_value, UUID) else uuid_value
 
 def convert_decimal(value):
     if isinstance(value, Decimal):
-        if value % 1 == 0:
-            return int(value)
-        else:
-            return float(value)
+        return int(value) if value % 1 == 0 else float(value)
     return value
 
 def clear_neo4j():
-    query = "MATCH (n) DETACH DELETE n"
-    neo4j_conn.execute_query(query)
-    print("✓ База данных Neo4j очищена")
+    neo4j_conn.execute_query("MATCH (n) DETACH DELETE n")
+    print("✓ Neo4j очищена")
 
+def format_date(d):
+    return d.isoformat() if isinstance(d, date) else d
+
+def format_time(t):
+    return t.isoformat() if isinstance(t, time) else t
 
 # ============================================================
-# 1. Синхронизация групп (student_groups)
+# 1. Синхронизация узлов Specialty
 # ============================================================
+def sync_specialties():
+    print("  Синхронизация специальностей...")
+    pg_cur.execute("""
+        SELECT id, name, code, degree_level, duration_years
+        FROM specialties
+    """)
+    rows = pg_cur.fetchall()
+    count = 0
+    for row in rows:
+        neo4j_conn.execute_query("""
+            MERGE (sp:Specialty {id: $id})
+            SET sp.name = $name,
+                sp.code = $code,
+                sp.degree_level = $degree_level,
+                sp.duration_years = $duration_years
+        """, {
+            'id': uuid_to_str(row[0]),
+            'name': row[1],
+            'code': row[2],
+            'degree_level': row[3],
+            'duration_years': convert_decimal(row[4])
+        })
+        count += 1
+    print(f"    ✓ {count} специальностей")
 
-
-def sync_groups():
+# ============================================================
+# 2. Синхронизация узлов StudentGroup (только поля группы, без дублирования специальности)
+# ============================================================
+def sync_student_groups():
+    print("  Синхронизация групп...")
     query = """
-        SELECT id, name, enrollment_year
+        SELECT id, name, enrollment_year, curator, specialty_id
         FROM student_groups
-        ORDER BY name
     """
     pg_cur.execute(query)
-    groups = pg_cur.fetchall()
-    
+    rows = pg_cur.fetchall()
     count = 0
-    for group in groups:
-        group_id = uuid_to_str(group[0])
-        group_name = group[1]
-        enrollment_year = convert_decimal(group[2])
-        
-        neo4j_query = """
-            MERGE (g:Group {id: $id})
-            SET g.name = $name,
-                g.enrollment_year = $enrollment_year
-        """
-        neo4j_conn.execute_query(neo4j_query, {
-            'id': group_id,
-            'name': group_name,
-            'enrollment_year': enrollment_year
+    for row in rows:
+        neo4j_conn.execute_query("""
+            MERGE (sg:StudentGroup {id: $id})
+            SET sg.name = $name,
+                sg.enrollment_year = $enrollment_year,
+                sg.curator = $curator,
+                sg.specialty_id = $specialty_id
+        """, {
+            'id': uuid_to_str(row[0]),
+            'name': row[1],
+            'enrollment_year': convert_decimal(row[2]),
+            'curator': row[3] or "",
+            'specialty_id': uuid_to_str(row[4])
         })
         count += 1
-    
-    print(f"  ✓ Синхронизировано {count} групп")
-    return count
-
+    print(f"    ✓ {count} групп")
 
 # ============================================================
-# 2. Синхронизация студентов
+# 3. Синхронизация узлов Student
 # ============================================================
-
-
 def sync_students():
-    query = """
-        SELECT 
-            s.id,
-            s.last_name,
-            s.first_name,
-            s.patronymic,
-            s.student_card_number,
-            s.email,
-            s.enrollment_date,
-            g.id as group_id
-        FROM students s
-        JOIN student_groups g ON s.group_id = g.id
-        ORDER BY s.last_name
-    """
-    pg_cur.execute(query)
-    students = pg_cur.fetchall()
-    
+    print("  Синхронизация студентов...")
+    pg_cur.execute("SELECT id, student_card_number FROM students")
+    rows = pg_cur.fetchall()
     count = 0
-    for student in students:
-        student_id = uuid_to_str(student[0])
-        last_name = student[1]
-        first_name = student[2]
-        patronymic = student[3] or ""
-        student_card_number = student[4]
-        email = student[5]
-        
-        full_name = f"{last_name} {first_name} {patronymic}".strip()
-        
-        neo4j_query = """
+    for row in rows:
+        neo4j_conn.execute_query("""
             MERGE (s:Student {id: $id})
-            SET s.name = $name,
-                s.student_card_number = $student_card_number,
-                s.email = $email
-        """
-        neo4j_conn.execute_query(neo4j_query, {
-            'id': student_id,
-            'name': full_name,
-            'student_card_number': student_card_number,
-            'email': email
+            SET s.student_card_number = $student_card_number
+        """, {
+            'id': uuid_to_str(row[0]),
+            'student_card_number': row[1]
         })
         count += 1
-    
-    print(f"  ✓ Синхронизировано {count} студентов")
-    return count
-
+    print(f"    ✓ {count} студентов")
 
 # ============================================================
-# 3. Синхронизация лекций
+# 4. Синхронизация узлов Schedule
 # ============================================================
+def sync_schedules():
+    print("  Синхронизация расписания...")
+    pg_cur.execute("SELECT id, scheduled_date, classroom, start_time FROM schedule")
+    rows = pg_cur.fetchall()
+    count = 0
+    for row in rows:
+        neo4j_conn.execute_query("""
+            MERGE (sch:Schedule {id: $id})
+            SET sch.date = $date,
+                sch.classroom = $classroom,
+                sch.time = $time
+        """, {
+            'id': uuid_to_str(row[0]),
+            'date': format_date(row[1]),
+            'classroom': row[2] or "Не указана",
+            'time': format_time(row[3])
+        })
+        count += 1
+    print(f"    ✓ {count} записей расписания")
 
-
+# ============================================================
+# 5. Синхронизация узлов Lecture (полная информация)
+# ============================================================
 def sync_lectures():
-    query = """
+    print("  Синхронизация лекций...")
+    pg_cur.execute("""
         SELECT 
             l.id,
             l.title,
+            l.annotation,
+            l.lecture_type,
+            l.order_number,
             l.duration_minutes,
-            lc.name as course_name,
-            lc.is_specialty_discipline,
-            sch.scheduled_date
+            l.requires_computers,
+            lc.semester,
+            lc.name AS course_name
         FROM lectures l
         JOIN lecture_courses lc ON l.course_id = lc.id
-        LEFT JOIN schedule sch ON sch.lecture_id = l.id
-        WHERE sch.scheduled_date IS NOT NULL
-    """
-    pg_cur.execute(query)
-    lectures = pg_cur.fetchall()
-    
+    """)
+    rows = pg_cur.fetchall()
     count = 0
-    processed = set()
-    
-    for lecture in lectures:
-        lecture_id = uuid_to_str(lecture[0])
-        
-        if lecture_id in processed:
-            continue
-        processed.add(lecture_id)
-        
-        title = lecture[1] or "Без названия"
-        duration_minutes = convert_decimal(lecture[2]) if lecture[2] else 90
-        course_name = lecture[3]
-        is_specialty_discipline = lecture[4] or False
-        scheduled_date = lecture[5]
-        
-        if scheduled_date:
-            date_str = scheduled_date.isoformat()
-            start_date = datetime(2026, 2, 9).date()
-            delta_days = (scheduled_date - start_date).days
-            week_number = (delta_days // 7) + 1 if delta_days >= 0 else 1
-            week_number = min(week_number, 16)
-        else:
-            date_str = "2026-02-09"
-            week_number = 1
-        
-        neo4j_query = """
-            MERGE (l:Lecture {id: $id})
-            SET l.title = $title,
-                l.course_name = $course_name,
-                l.date = $date,
-                l.week_number = $week_number,
-                l.duration_minutes = $duration,
-                l.is_specialty_discipline = $is_specialty
-        """
-        neo4j_conn.execute_query(neo4j_query, {
-            'id': lecture_id,
-            'title': title,
-            'course_name': course_name,
-            'date': date_str,
-            'week_number': week_number,
-            'duration': duration_minutes,
-            'is_specialty': is_specialty_discipline
+    for row in rows:
+        neo4j_conn.execute_query("""
+            MERGE (lec:Lecture {id: $id})
+            SET lec.title = $title,
+                lec.annotation = $annotation,
+                lec.type = $type,
+                lec.order_number = $order_number,
+                lec.duration_minutes = $duration,
+                lec.requires_computers = $requires_computers,
+                lec.semester = $semester,
+                lec.course_name = $course_name
+        """, {
+            'id': uuid_to_str(row[0]),
+            'title': row[1] or "Без названия",
+            'annotation': row[2] or "",
+            'type': row[3],
+            'order_number': convert_decimal(row[4]),
+            'duration': convert_decimal(row[5]) if row[5] else 90,
+            'requires_computers': row[6] if row[6] is not None else False,
+            'semester': convert_decimal(row[7]),
+            'course_name': row[8]
         })
         count += 1
-        
-        if count % 500 == 0:
-            print(f"     Прогресс: {count} лекций синхронизировано...")
-    
-    print(f"  ✓ Синхронизировано {count} лекций")
-    return count
-
+    print(f"    ✓ {count} лекций")
 
 # ============================================================
-# 4. Создание связей ENROLLED_IN (Student → Group)
+# 6. Синхронизация узлов Course
 # ============================================================
-
-
-def create_enrolled_in_relationships():
-    query = """
+def sync_courses():
+    print("  Синхронизация курсов...")
+    pg_cur.execute("""
         SELECT 
-            s.id as student_id,
-            g.id as group_id,
-            s.enrollment_date
-        FROM students s
-        JOIN student_groups g ON s.group_id = g.id
-        WHERE s.status = 'active'
-    """
-    pg_cur.execute(query)
-    relationships = pg_cur.fetchall()
-    
+            id,
+            name,
+            description,
+            semester,
+            total_hours,
+            lecture_hours,
+            practice_hours,
+            lab_hours,
+            is_specialty_discipline
+        FROM lecture_courses
+    """)
+    rows = pg_cur.fetchall()
     count = 0
-    for rel in relationships:
-        student_id = uuid_to_str(rel[0])
-        group_id = uuid_to_str(rel[1])
-        enrollment_date = rel[2]
-        enrollment_year = enrollment_date.year if enrollment_date else 2023
-        
-        neo4j_query = """
+    for row in rows:
+        neo4j_conn.execute_query("""
+            MERGE (c:Course {id: $id})
+            SET c.name = $name,
+                c.description = $description,
+                c.semester = $semester,
+                c.total_hours = $total_hours,
+                c.lecture_hours = $lecture_hours,
+                c.practice_hours = $practice_hours,
+                c.lab_hours = $lab_hours,
+                c.is_specialty_discipline = $is_specialty
+        """, {
+            'id': uuid_to_str(row[0]),
+            'name': row[1],
+            'description': row[2] or "",
+            'semester': convert_decimal(row[3]),
+            'total_hours': convert_decimal(row[4]),
+            'lecture_hours': convert_decimal(row[5]),
+            'practice_hours': convert_decimal(row[6]),
+            'lab_hours': convert_decimal(row[7]),
+            'is_specialty': row[8] or False
+        })
+        count += 1
+    print(f"    ✓ {count} курсов")
+
+# ============================================================
+# 7. Создание связей
+# ============================================================
+def create_relationships():
+    # 1. StudentGroup -> HAS_SPECIALTY -> Specialty
+    print("  Создание связей HAS_SPECIALTY...")
+    pg_cur.execute("SELECT id, specialty_id FROM student_groups")
+    rows = pg_cur.fetchall()
+    count = 0
+    for row in rows:
+        group_id = uuid_to_str(row[0])
+        specialty_id = uuid_to_str(row[1])
+        neo4j_conn.execute_query("""
+            MATCH (sg:StudentGroup {id: $group_id})
+            MATCH (sp:Specialty {id: $specialty_id})
+            MERGE (sg)-[:HAS_SPECIALTY]->(sp)
+        """, {'group_id': group_id, 'specialty_id': specialty_id})
+        count += 1
+    print(f"    ✓ {count} связей HAS_SPECIALTY")
+
+    # 2. StudentGroup -> HAS_STUDENT -> Student
+    print("  Создание связей HAS_STUDENT...")
+    pg_cur.execute("SELECT id, group_id FROM students")
+    rows = pg_cur.fetchall()
+    count = 0
+    for row in rows:
+        student_id = uuid_to_str(row[0])
+        group_id = uuid_to_str(row[1])
+        neo4j_conn.execute_query("""
+            MATCH (sg:StudentGroup {id: $group_id})
             MATCH (s:Student {id: $student_id})
-            MATCH (g:Group {id: $group_id})
-            MERGE (s)-[r:ENROLLED_IN]->(g)
-            SET r.enrollment_year = $enrollment_year
-        """
-        neo4j_conn.execute_query(neo4j_query, {
-            'student_id': student_id,
-            'group_id': group_id,
-            'enrollment_year': enrollment_year
-        })
+            MERGE (sg)-[:HAS_STUDENT]->(s)
+        """, {'group_id': group_id, 'student_id': student_id})
         count += 1
-        
-        if count % 500 == 0:
-            print(f"     Прогресс: {count} связей ENROLLED_IN создано...")
-    
-    print(f"  ✓ Создано {count} связей ENROLLED_IN")
-    return count
+    print(f"    ✓ {count} связей HAS_STUDENT")
 
-
-# ============================================================
-# 5. Создание связей HAS_LECTURE (Group → Lecture) - расписание
-# ============================================================
-
-
-def create_has_lecture_relationships():
-    query = """
-        SELECT 
-            sch.group_id,
-            sch.lecture_id,
-            sch.teacher_name
-        FROM schedule sch
-        WHERE sch.status != 'cancelled'
-    """
-    pg_cur.execute(query)
-    schedules = pg_cur.fetchall()
-    
+    # 3. StudentGroup -> HAS_SCHEDULE -> Schedule
+    print("  Создание связей HAS_SCHEDULE...")
+    pg_cur.execute("SELECT id, group_id FROM schedule")
+    rows = pg_cur.fetchall()
     count = 0
-    for schedule in schedules:
-        group_id = uuid_to_str(schedule[0])
-        lecture_id = uuid_to_str(schedule[1])
-        teacher_name = schedule[2] or "Не указан"
-        
-        neo4j_query = """
-            MATCH (g:Group {id: $group_id})
-            MATCH (l:Lecture {id: $lecture_id})
-            MERGE (g)-[r:HAS_LECTURE]->(l)
-            SET r.teacher = $teacher,
-                r.classroom = "Не указана"
-        """
-        neo4j_conn.execute_query(neo4j_query, {
-            'group_id': group_id,
-            'lecture_id': lecture_id,
-            'teacher': teacher_name
-        })
+    for row in rows:
+        schedule_id = uuid_to_str(row[0])
+        group_id = uuid_to_str(row[1])
+        neo4j_conn.execute_query("""
+            MATCH (sg:StudentGroup {id: $group_id})
+            MATCH (sch:Schedule {id: $schedule_id})
+            MERGE (sg)-[:HAS_SCHEDULE]->(sch)
+        """, {'group_id': group_id, 'schedule_id': schedule_id})
         count += 1
-        
-        if count % 500 == 0:
-            print(f"     Прогресс: {count} связей HAS_LECTURE создано...")
-    
-    print(f"  ✓ Создано {count} связей HAS_LECTURE")
-    return count
+    print(f"    ✓ {count} связей HAS_SCHEDULE")
 
-
-# ============================================================
-# 6. Создание связей ATTENDED (Student → Lecture) - посещаемость
-# ============================================================
-
-
-def create_attended_relationships():
-    query = """
-        SELECT 
-            att.student_id,
-            sch.lecture_id,
-            att.is_present,
-            att.marked_at,
-            att.marked_by
-        FROM attendance att
-        JOIN schedule sch ON att.schedule_id = sch.id
-        WHERE att.is_present IS NOT NULL
-    """
-    pg_cur.execute(query)
-    attendances = pg_cur.fetchall()
-    
+    # 4. Schedule -> PART_OF -> Lecture
+    print("  Создание связей PART_OF...")
+    pg_cur.execute("SELECT id, lecture_id FROM schedule")
+    rows = pg_cur.fetchall()
     count = 0
-    for att in attendances:
-        student_id = uuid_to_str(att[0])
-        lecture_id = uuid_to_str(att[1])
-        is_present = att[2]
-        marked_at = att[3].isoformat() if att[3] else datetime.now().isoformat()
-        marked_by = att[4] or "Система"
-        
-        neo4j_query = """
-            MATCH (s:Student {id: $student_id})
-            MATCH (l:Lecture {id: $lecture_id})
-            MERGE (s)-[r:ATTENDED]->(l)
-            SET r.present = $present,
-                r.marked_at = $marked_at,
-                r.marked_by = $marked_by
-        """
-        neo4j_conn.execute_query(neo4j_query, {
-            'student_id': student_id,
-            'lecture_id': lecture_id,
-            'present': is_present,
-            'marked_at': marked_at,
-            'marked_by': marked_by
-        })
+    for row in rows:
+        schedule_id = uuid_to_str(row[0])
+        lecture_id = uuid_to_str(row[1])
+        neo4j_conn.execute_query("""
+            MATCH (sch:Schedule {id: $schedule_id})
+            MATCH (lec:Lecture {id: $lecture_id})
+            MERGE (sch)-[:PART_OF]->(lec)
+        """, {'schedule_id': schedule_id, 'lecture_id': lecture_id})
         count += 1
-        
-        if count % 2000 == 0:
-            print(f"     Прогресс: {count} связей ATTENDED создано...")
-    
-    print(f"  ✓ Создано {count} связей ATTENDED")
-    return count
+    print(f"    ✓ {count} связей PART_OF")
 
+    # 5. Lecture -> BELONGS_TO -> Course
+    print("  Создание связей BELONGS_TO...")
+    pg_cur.execute("SELECT id, course_id FROM lectures")
+    rows = pg_cur.fetchall()
+    count = 0
+    for row in rows:
+        lecture_id = uuid_to_str(row[0])
+        course_id = uuid_to_str(row[1])
+        neo4j_conn.execute_query("""
+            MATCH (lec:Lecture {id: $lecture_id})
+            MATCH (c:Course {id: $course_id})
+            MERGE (lec)-[:BELONGS_TO]->(c)
+        """, {'lecture_id': lecture_id, 'course_id': course_id})
+        count += 1
+    print(f"    ✓ {count} связей BELONGS_TO")
 
 # ============================================================
-# Проверка данных в Neo4j
+# 8. Проверка статистики
 # ============================================================
-
-
 def check_neo4j_data():
-    result = neo4j_conn.execute_query("MATCH (s:Student) RETURN count(s) as count")
-    student_count = result[0]['count'] if result else 0
-    
-    result = neo4j_conn.execute_query("MATCH (g:Group) RETURN count(g) as count")
-    group_count = result[0]['count'] if result else 0
-    
-    result = neo4j_conn.execute_query("MATCH (l:Lecture) RETURN count(l) as count")
-    lecture_count = result[0]['count'] if result else 0
-    
-    result = neo4j_conn.execute_query("MATCH ()-[r:ENROLLED_IN]->() RETURN count(r) as count")
-    enrolled_count = result[0]['count'] if result else 0
-    
-    result = neo4j_conn.execute_query("MATCH ()-[r:HAS_LECTURE]->() RETURN count(r) as count")
-    has_lecture_count = result[0]['count'] if result else 0
-    
-    result = neo4j_conn.execute_query("MATCH ()-[r:ATTENDED]->() RETURN count(r) as count")
-    attended_count = result[0]['count'] if result else 0
-    
-    print(f"\n📊 Статистика Neo4j:")
-    print(f"  • Узлов Student: {student_count}")
-    print(f"  • Узлов Group: {group_count}")
-    print(f"  • Узлов Lecture: {lecture_count}")
-    print(f"  • Связей ENROLLED_IN: {enrolled_count}")
-    print(f"  • Связей HAS_LECTURE: {has_lecture_count}")
-    print(f"  • Связей ATTENDED: {attended_count}")
-
+    labels = ['Specialty', 'StudentGroup', 'Student', 'Schedule', 'Lecture', 'Course']
+    print("\n📊 Статистика Neo4j (с узлами Specialty):")
+    for label in labels:
+        res = neo4j_conn.execute_query(f"MATCH (n:{label}) RETURN count(n) as cnt")
+        cnt = res[0]['cnt'] if res else 0
+        print(f"  • {label}: {cnt}")
+    rels = ['HAS_SPECIALTY', 'HAS_STUDENT', 'HAS_SCHEDULE', 'PART_OF', 'BELONGS_TO']
+    for rel in rels:
+        res = neo4j_conn.execute_query(f"MATCH ()-[r:{rel}]->() RETURN count(r) as cnt")
+        cnt = res[0]['cnt'] if res else 0
+        print(f"  • {rel}: {cnt}")
 
 # ============================================================
 # Основная функция
 # ============================================================
-
-
 def main():
     print("=" * 60)
-    print("СИНХРОНИЗАЦИЯ ДАННЫХ ИЗ POSTGRESQL В NEO4J")
+    print("СИНХРОНИЗАЦИЯ POSTGRESQL -> NEO4J (С УЗЛАМИ SPECIALTY)")
     print("=" * 60)
 
-    print("\n0. Полная очистка Neo4j...")
-    clear_neo4j()
-    
     try:
-        # Проверка подключения к PostgreSQL
-        print("\n1. Проверка подключения к PostgreSQL...")
-        pg_cur.execute("SELECT 1")
-        print("   ✓ PostgreSQL доступен")
-        
-        # Проверка подключения к Neo4j
-        print("\n2. Проверка подключения к Neo4j...")
-        neo4j_conn.execute_query("RETURN 1 as test")
-        print("   ✓ Neo4j доступен")
-        
-        # Очистка Neo4j
-        print("\n3. Очистка Neo4j...")
+        print("\n0. Очистка Neo4j...")
         clear_neo4j()
-        
-        # Синхронизация узлов
-        print("\n4. Синхронизация узлов...")
-        sync_groups()
+
+        print("\n1. Создание узлов...")
+        sync_specialties()
+        sync_student_groups()
         sync_students()
+        sync_schedules()
         sync_lectures()
-        
-        # Создание связей
-        print("\n5. Создание связей...")
-        create_enrolled_in_relationships()
-        create_has_lecture_relationships()
-        create_attended_relationships()
-        
-        # Проверка данных
-        print("\n6. Проверка данных...")
+        sync_courses()
+
+        print("\n2. Создание связей...")
+        create_relationships()
+
+        print("\n3. Проверка данных...")
         check_neo4j_data()
-        
+
         print("\n" + "=" * 60)
-        print("✓ СИНХРОНИЗАЦИЯ В NEO4J ЗАВЕРШЕНА УСПЕШНО!")
+        print("✓ СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА УСПЕШНО!")
         print("=" * 60)
-        
+
     except Exception as e:
         print(f"\n✗ Ошибка: {e}")
         import traceback
         traceback.print_exc()
-    
     finally:
         pg_cur.close()
         pg_conn.close()
         neo4j_conn.close()
-
-
-# ============================================================
-# Запуск
-# ============================================================
-
 
 if __name__ == "__main__":
     main()

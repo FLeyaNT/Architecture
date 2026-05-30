@@ -168,6 +168,7 @@ CREATE TABLE schedule (
     week_start_date DATE NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
+    classroom VARCHAR(50),
     teacher_name VARCHAR(300),
     status VARCHAR(20) DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'cancelled')),
     created_at TIMESTAMP DEFAULT NOW(),

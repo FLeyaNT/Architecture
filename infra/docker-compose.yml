@@ -9,7 +9,6 @@ services:
       - "6379:6379"
     volumes:
       - ./docker_services/data/redis:/data
-      - ./docker_services/logs/redis:/var/log/redis
     command: >
       redis-server
       --appendonly yes
@@ -17,8 +16,6 @@ services:
       --save 900 1
       --save 300 10
       --save 60 10000
-      --logfile /var/log/redis/redis.log
-      --loglevel notice
     networks:
       - data-network
     healthcheck:
@@ -53,8 +50,7 @@ services:
       MONGO_INITDB_DATABASE: testdb
     volumes:
       - ./docker_services/data/mongo:/data/db
-      - ./docker_services/logs/mongo:/var/log/mongodb
-    command: ["mongod", "--logpath", "/var/log/mongodb/mongod.log", "--bind_ip_all"]
+    command: ["mongod", "--bind_ip_all"]
     networks:
       - data-network
     healthcheck:
@@ -97,6 +93,12 @@ services:
       - ./docker_services/logs/neo4j:/logs
     networks:
       - data-network
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p password 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
 
   elastic:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.16.0
@@ -114,7 +116,6 @@ services:
       - xpack.ml.enabled=false
     volumes:
       - ./docker_services/data/elastic:/usr/share/elasticsearch/data
-      - ./docker_services/logs/elastic:/usr/share/elasticsearch/logs
     networks:
       - data-network
     deploy:
@@ -162,7 +163,6 @@ services:
       POSTGRES_DB: testdb
     volumes:
       - ./docker_services/data/postgres:/var/lib/postgresql/data
-      - ./docker_services/logs/postgres:/var/log/postgresql
     command: >
       postgres 
       -c logging_collector=on 
@@ -178,6 +178,67 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+# =================== Microservices ===================
+
+  gateway:
+    container_name: gateway
+    build: ../microservices/gateway_app
+    ports:
+      - "8000:8000"
+    networks:
+      - data-network
+    command: "python app/main.py"
+    restart: "no"    
+
+  first_service:
+    container_name: first_service
+    build: ../microservices/first_service
+    ports:
+      - "8001:8000"
+    networks:
+      - data-network
+    command: "python app/main.py"
+    restart: "no"
+    depends_on:
+      elastic:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+
+  second_service:
+    container_name: second_service
+    build: ../microservices/second_service
+    ports:
+      - "8002:8000"
+    networks:
+      - data-network
+    command: "python app/main.py"
+    restart: "no"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  third_service:
+    container_name: third_service
+    build: ../microservices/third_service
+    ports:
+      - "8003:8000"
+    networks:
+      - data-network
+    command: "python app/main.py"
+    restart: "no"
+    depends_on:
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
 
 networks:
   data-network:
