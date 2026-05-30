@@ -3,7 +3,8 @@ import uvicorn
 from fastapi import (
     FastAPI,
     status,
-    Query
+    Query,
+    HTTPException
 )
 
 from contextlib import asynccontextmanager
@@ -54,12 +55,18 @@ def get_attendance_stats(
     date_to: Annotated[date, Query()] = date(2026, 6, 30),
     limit: Annotated[int, Query(gt=0)] = 10
 ):
-    return student_service.get_attendance_report(
-        term,
-        str(date_from),
-        str(date_to),
-        limit
-    )
+    try:
+        return student_service.get_attendance_report(
+            term,
+            str(date_from),
+            str(date_to),
+            limit
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Not found'
+        )
 
 
 if __name__ == '__main__':

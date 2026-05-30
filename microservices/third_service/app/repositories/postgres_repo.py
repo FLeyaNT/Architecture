@@ -10,10 +10,6 @@ class PostgresRepo:
         self,
         student_schedule_pairs: List[Tuple[str, str]]
     ) -> Dict[Tuple[str, str], bool]:
-        """
-        Принимает список пар (student_id, schedule_id) в виде строк.
-        Возвращает словарь {(student_id, schedule_id): is_present}
-        """
         if not student_schedule_pairs:
             return {}
 

@@ -12,23 +12,14 @@ class ElasticRepo:
     def get_lectures_id_by_term_and_date(
         self,
         term: str,
-        date_from: str,
-        date_to: str
     ) -> list[str]:
         query_body = {
             "query": {
-                "bool": {
-                    "must": [
-                        {
-                            "multi_match": {
-                                "query": term,
-                                "fields": ["title^3", "annotation^2", "content_text"],
-                                "type": "best_fields",
-                                "operator": "and",
-                            }
-                        }
-                    ],
-                    "filter": [{"range": {"date": {"gte": date_from, "lte": date_to}}}],
+                "multi_match": {
+                    "query": term,
+                    "fields": ["title^3", "annotation^2", "content_text"],
+                    "type": "best_fields",
+                    "operator": "and",
                 }
             },
             "_source": ["lecture_id"],

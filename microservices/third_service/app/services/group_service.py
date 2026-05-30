@@ -1,4 +1,3 @@
-# services/group_report_service.py
 from repositories import Neo4jRepo, PostgresRepo, RedisRepo
 from schemas.schemas import GroupReportResponse, StudentReport, CourseHours
 from collections import defaultdict
@@ -6,6 +5,7 @@ from typing import Dict, Any
 
 
 class GroupReportService:
+    
     def __init__(
         self,
         neo4j_repo: Neo4jRepo,
@@ -16,7 +16,6 @@ class GroupReportService:
         self.pg_repo = pg_repo
         self.redis_repo = redis_repo
 
-    # services/group_report_service.py
     def get_group_report(self, group_name: str) -> GroupReportResponse:
         # 1. Получаем данные из Neo4j
         neo4j_data = self.neo4j_repo.get_group_report_data(group_name)
@@ -53,7 +52,7 @@ class GroupReportService:
             for course_name, data in student_courses[student_id].items():
                 courses_list.append(
                     CourseHours(
-                        course_id=data["course_id"],           # ← добавили course_id
+                        course_id=data["course_id"],
                         course_name=course_name,
                         planned_hours=float(data["planned_hours"]),
                         attended_hours=float(data["attended_hours"])

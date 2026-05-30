@@ -521,7 +521,7 @@ materials = []
 content_types = ['text', 'text', 'presentation', 'pdf', 'video_link']
 for lecture in lectures:
     base_text = fake.text(max_nb_chars=2000)
-    if random.random() < 0.9:
+    if random.random() < 0.8:
         term = random.choice(popular_terms)
         words = base_text.split()
         if len(words) > 10:
@@ -534,7 +534,7 @@ for lecture in lectures:
         'lecture_id': lecture['id'],
         'content_type': random.choice(content_types),
         'title': fake.sentence(nb_words=4)[:-1],
-        'content_text': base_text if random.random() > 0.2 else None,
+        'content_text': base_text,
         'file_url': fake.url() if random.random() > 0.5 else None,
         'metadata': metadata_json
     })

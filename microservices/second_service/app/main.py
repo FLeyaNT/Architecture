@@ -3,17 +3,16 @@ import uvicorn
 from fastapi import (
     FastAPI,
     status,
-    Query
+    Query,
+    HTTPException
 )
 
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Annotated
-from datetime import date
 
 from core.config import get_settings
 from core.dependencies import (
     get_neo4j_driver,
-    get_pg_connection,
     CourseServiceDep,
 )
 from schemas.schemas import CourseInfoResponse
@@ -25,12 +24,10 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     neo4j_driver = get_neo4j_driver()
-    pg_conn = get_pg_connection()
 
     yield
 
     neo4j_driver.close()
-    pg_conn.close()
 
 
 app = FastAPI(
@@ -49,11 +46,17 @@ def get_course_info(
     semester: Annotated[int, Query()] = 3,
     year: Annotated[int, Query()] = 2026
 ):
-    return course_service.get_course_info(
-        course_name,
-        semester,
-        year
-    )
+    try:
+        return course_service.get_course_info(
+            course_name,
+            semester,
+            year
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Not found'
+        )
 
 
 if __name__ == '__main__':

@@ -2,7 +2,6 @@
 import psycopg2
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
-import re
 from datetime import datetime
 from typing import List, Dict, Any, Tuple
 
@@ -30,10 +29,10 @@ es = Elasticsearch(
 INDEX_NAME = 'lectures'
 
 # ============================================================
-# Создание индекса с маппингом (добавлено поле date)
+# Создание индекса с маппингом (только нужные поля)
 # ============================================================
 def create_index_if_not_exists():
-    """Создаёт индекс lectures с русским анализатором и маппингом"""
+    """Создаёт индекс lectures с русским анализатором и минимальным маппингом"""
     if es.indices.exists(index=INDEX_NAME):
         print(f"✓ Индекс {INDEX_NAME} уже существует, удаляем...")
         es.indices.delete(index=INDEX_NAME)
@@ -80,63 +79,38 @@ def create_index_if_not_exists():
                     "type": "text",
                     "analyzer": "russian_analyzer"
                 },
-                "is_specialty_discipline": {"type": "boolean"},
-                "lecture_type": {"type": "keyword"},
-                "duration_minutes": {"type": "integer"},
-                "semester": {"type": "integer"},
-                "date": {"type": "date"},                      # ← ДОБАВЛЕНО
-                "tags": {"type": "keyword"},
-                "created_at": {"type": "date"},
-                "updated_at": {"type": "date"}
+                "semester": {"type": "integer"}
             }
         }
     }
 
     es.indices.create(index=INDEX_NAME, body=settings)
-    print(f"✓ Индекс {INDEX_NAME} создан с русским анализатором и полем date")
+    print(f"✓ Индекс {INDEX_NAME} создан с русским анализатором (ненужные поля удалены)")
 
 # ============================================================
-# Вспомогательные функции
-# ============================================================
-def extract_tags(title: str, course_name: str) -> List[str]:
-    """Извлекает простые теги из названия лекции и курса"""
-    text = (title + " " + course_name).lower()
-    words = re.findall(r'\b\w+\b', text)
-    tags = list(set([w for w in words if len(w) > 3]))
-    return tags[:10]
-
-# ============================================================
-# Получение данных из PostgreSQL (с датой лекции)
+# Получение данных из PostgreSQL (без лишних полей)
 # ============================================================
 def fetch_lectures_data() -> List[Tuple[str, Dict]]:
     """
-    Выбирает данные о лекциях, курсах, материалах и дате проведения.
-    Для одной лекции может быть несколько дат (разные группы).
-    Берём MIN дату как основную (или можно ANY).
+    Выбирает только необходимые данные: 
+    id, название, аннотацию, текст материалов, название курса, описание курса, семестр.
     """
     query = """
         SELECT 
             l.id,
             l.title,
             l.annotation,
-            l.lecture_type,
-            l.duration_minutes,
             lc.name AS course_name,
             lc.description AS course_description,
-            lc.is_specialty_discipline,
             lc.semester,
             COALESCE(
                 (SELECT string_agg(content_text, ' ') 
                  FROM lecture_materials 
                  WHERE lecture_id = l.id AND content_type = 'text'),
                 '' 
-            ) AS content_text,
-            MIN(sch.scheduled_date) AS lecture_date   -- ← берём первую дату лекции
+            ) AS content_text
         FROM lectures l
         JOIN lecture_courses lc ON l.course_id = lc.id
-        LEFT JOIN schedule sch ON sch.lecture_id = l.id
-        GROUP BY l.id, l.title, l.annotation, l.lecture_type, l.duration_minutes,
-                 lc.name, lc.description, lc.is_specialty_discipline, lc.semester
         ORDER BY l.id
     """
     pg_cur.execute(query)
@@ -147,14 +121,10 @@ def fetch_lectures_data() -> List[Tuple[str, Dict]]:
         lec_id = str(row[0])
         title = row[1] or "Без названия"
         annotation = row[2] or ""
-        lecture_type = row[3] or "lecture"
-        duration_minutes = row[4] if row[4] else 90
-        course_name = row[5] or "Не указан"
-        course_description = row[6] or ""
-        is_specialty = row[7] if row[7] is not None else False
-        semester = row[8] if row[8] else 1
-        content_text = row[9] or ""
-        lecture_date = row[10].isoformat() if row[10] else "2026-01-01"
+        course_name = row[3] or "Не указан"
+        course_description = row[4] or ""
+        semester = row[5] if row[5] is not None else 1
+        content_text = row[6] or ""
 
         doc = {
             "lecture_id": lec_id,
@@ -163,14 +133,7 @@ def fetch_lectures_data() -> List[Tuple[str, Dict]]:
             "content_text": content_text,
             "course_name": course_name,
             "course_description": course_description,
-            "is_specialty_discipline": is_specialty,
-            "lecture_type": lecture_type,
-            "duration_minutes": duration_minutes,
-            "semester": semester,
-            "date": lecture_date,                           # ← ДОБАВЛЕНО
-            "tags": extract_tags(title, course_name),
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
+            "semester": semester
         }
         lectures_data.append((lec_id, doc))
     
@@ -201,30 +164,6 @@ def bulk_index(lectures_data: List[Tuple[str, Dict]]):
     return success
 
 # ============================================================
-# Проверка данных в Elasticsearch
-# ============================================================
-def check_elasticsearch():
-    """Выводит статистику по индексу"""
-    try:
-        stats = es.indices.stats(index=INDEX_NAME)
-        doc_count = stats['indices'][INDEX_NAME]['total']['docs']['count']
-        print(f"\n📊 Статистика Elasticsearch:")
-        print(f"  • Индекс: {INDEX_NAME}")
-        print(f"  • Количество документов: {doc_count}")
-        
-        # Пример одного документа
-        res = es.search(index=INDEX_NAME, body={"query": {"match_all": {}}}, size=1)
-        if res['hits']['hits']:
-            sample = res['hits']['hits'][0]['_source']
-            print(f"\n  Пример документа:")
-            print(f"    ID: {res['hits']['hits'][0]['_id']}")
-            print(f"    Название: {sample.get('title')}")
-            print(f"    Дата: {sample.get('date')}")
-            print(f"    Курс: {sample.get('course_name')}")
-    except Exception as e:
-        print(f"Ошибка при проверке: {e}")
-
-# ============================================================
 # Очистка Elasticsearch (удаление индекса)
 # ============================================================
 def clear_elasticsearch():
@@ -241,6 +180,7 @@ def clear_elasticsearch():
 def main():
     print("=" * 60)
     print("СИНХРОНИЗАЦИЯ POSTGRESQL -> ELASTICSEARCH")
+    print("(удалены поля: is_specialty_discipline, lecture_type, duration_minutes, date, tags, created_at, updated_at)")
     print("=" * 60)
 
     try:
@@ -271,9 +211,6 @@ def main():
         print("\n6. Индексация в Elasticsearch...")
         indexed = bulk_index(lectures_data)
 
-        # 6. Проверка
-        print("\n7. Проверка данных в Elasticsearch...")
-        check_elasticsearch()
 
         print("\n" + "=" * 60)
         print("✓ СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА УСПЕШНО!")

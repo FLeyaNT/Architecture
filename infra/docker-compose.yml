@@ -50,7 +50,7 @@ services:
       MONGO_INITDB_DATABASE: testdb
     volumes:
       - ./docker_services/data/mongo:/data/db
-    command: ["mongod", "--bind_ip_all"]
+    command: ["mongod", "--bind_ip_all", "--logpath", "/var/log/mongodb/mongod.log", "--quiet"]
     networks:
       - data-network
     healthcheck:

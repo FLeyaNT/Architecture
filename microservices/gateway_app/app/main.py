@@ -54,7 +54,7 @@ async def get_attendance_stats(
     gateway_service: GatewayServiceDep,
     _: RequireAuthDep,
     term: Annotated[str, Query()] = 'нейронные сети',
-    date_from: Annotated[date, Query()] = date(2026, 2, 1),
+    date_from: Annotated[date, Query()] = date(2025, 2, 1),
     date_to: Annotated[date, Query()] = date(2026, 6, 30),
     limit: Annotated[int, Query(gt=0)] = 10
 ):
@@ -72,15 +72,31 @@ async def get_course_info(
     request: Request,
     gateway_service: GatewayServiceDep,
     _: RequireAuthDep,
-    course_name: Annotated[str, Query()] = 'Стратегическое и широкое интернет-решение',
-    semester: Annotated[int, Query()] = 3,
-    year: Annotated[int, Query()] = 2026
+    course_name: Annotated[str, Query()] = 'Реализованная и мультимедийная стандартизация',
+    semester: Annotated[int, Query()] = 1,
+    year: Annotated[int, Query()] = 2025
 ):
     query_params = request.query_params
     return await gateway_service.forward_request(
         request=request,
         service='second',
         path='course',
+        query_params=query_params
+    )
+
+
+@app.get('/third_lab')
+async def get_group_report(
+    request: Request,
+    gateway_service: GatewayServiceDep,
+    _: RequireAuthDep,
+    group_name: Annotated[str, Query()] = 'ЩС-25-2'
+):
+    query_params = request.query_params
+    return await gateway_service.forward_request(
+        request=request,
+        service='third',
+        path='group_report',
         query_params=query_params
     )
 

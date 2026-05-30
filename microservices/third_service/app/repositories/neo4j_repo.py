@@ -4,10 +4,10 @@ from typing import Dict, Any
 from collections import defaultdict
 
 class Neo4jRepo:
+    
     def __init__(self, session: Session):
         self.session = session
 
-    # repositories/neo4j_repo.py
     def get_group_report_data(self, group_name: str) -> Dict[str, Any]:
         query = """
             MATCH (sg:StudentGroup {name: $group_name})

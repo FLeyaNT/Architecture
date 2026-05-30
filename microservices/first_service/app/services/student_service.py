@@ -30,7 +30,7 @@ class StudentService:
     ) -> AttendanceReportResponse:
         # 1. Получаем lecture_id из Elasticsearch
         lecture_ids = self.elastic_repo.get_lectures_id_by_term_and_date(
-            term, date_from, date_to
+            term
         )
         if not lecture_ids:
             return AttendanceReportResponse(
@@ -40,7 +40,9 @@ class StudentService:
             )
 
         # 2. Получаем для каждого студента список schedule_id (Neo4j)
-        student_schedule_map = self.neo4j_repo.get_student_schedule_ids(lecture_ids)
+        student_schedule_map = self.neo4j_repo.get_student_schedule_ids(
+            lecture_ids, date_from, date_to
+        )
         if not student_schedule_map:
             return AttendanceReportResponse(
                 students=[],

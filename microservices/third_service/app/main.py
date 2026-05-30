@@ -25,14 +25,12 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
-    # Инициализация клиентов
     neo4j_driver = get_neo4j_driver()
     redis_client = get_redis_client()
     pg_conn = get_postgres_conn()
 
     yield
 
-    # Закрытие соединений
     neo4j_driver.close()
     redis_client.close()
     pg_conn.close()
@@ -61,7 +59,7 @@ def get_group_report(
         result = service.get_group_report(group_name)
         return result
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail='Not found')
 
 
 if __name__ == '__main__':

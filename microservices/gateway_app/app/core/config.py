@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     services: dict[str, str] = {
         'first': 'http://first_service:8000',
         'second': 'http://second_service:8000',
-        'third': 'http://localhost:8003'
+        'third': 'http://third_service:8000'
     }
 
     jwt_secret_key: str = 'dhdhf-5gsrhsh-afjjf-3thdhdhk-fdgsdkjdgas-dssgsd'
