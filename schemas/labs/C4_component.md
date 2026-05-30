@@ -1,3 +1,8 @@
+# C4 уровня компонентов
+
+
+<img width="1202" height="962" alt="image" src="https://github.com/user-attachments/assets/99779fc8-7595-4a85-aea2-5b9d09771628" />
+
 
 ```plantuml
 @startuml
