@@ -1,5 +1,5 @@
 
-'''plantuml
+```plantuml
 @startuml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
 
@@ -52,4 +52,4 @@ Rel(generator, neo4j, "")
 Rel(generator, mongodb, "")
 Rel(generator, elasticsearch, "")
 @enduml
-'''
+```
