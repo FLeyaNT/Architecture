@@ -43,6 +43,6 @@ PUT /lecture_materials
 | Поле | Тип | Зачем |
 |---|---|---|
 | `id` | keyword | id материала, совпадает с `_id` |
-| `lecture_id` | keyword | Связь с занятием: по нему агрегация `terms` в ЛР1 |
+| `lecture_id` | keyword | Связь с занятием |
 | `title` | text (`russian_custom`) + `title.keyword` | Поиск по заголовку; точное значение — для сортировки и агрегаций |
 | `content_text` | text (`russian_custom`) | Основной текст для поиска |
